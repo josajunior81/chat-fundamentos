@@ -1,5 +1,6 @@
 onlyBuiltDependencies:
   - '@tailwindcss/oxide'
+  - '@vercel/speed-insights'
   - faiss-node
   - protobufjs
   - sharp

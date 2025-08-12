@@ -1,4 +1,3 @@
-import { MessageMetadata } from './../../types';
 import 'dotenv/config';
 
 import { ChatMistralAI } from "@langchain/mistralai";
@@ -10,7 +9,6 @@ import { NomicEmbeddings } from "@langchain/nomic";
 import { ChatPromptTemplate } from "@langchain/core/prompts";
 import { FundamentosUIMessage } from '@/app/types';
 
-import fs from 'fs';
 import path from 'path';
 
 // Allow streaming responses up to 30 seconds
@@ -23,8 +21,6 @@ export async function POST(req: Request) {
   }: {
     messages: FundamentosUIMessage[];
   } = await req.json();
-
-  console.log('Received messages:', JSON.stringify(messages));
 
   const model = new ChatMistralAI({
     model: 'mistral-medium',
@@ -45,8 +41,10 @@ export async function POST(req: Request) {
 
   const similaritySearchResults = await vectorStore.similaritySearch(text, 5);
 
-  let templateContext = similaritySearchResults.map(doc => doc.pageContent).join('\n\n');
-  let metadataContext = similaritySearchResults.map(doc => doc.metadata) as MessageMetadata[];
+  const templateContext = similaritySearchResults.map(doc => doc.pageContent).join('\n\n');
+  const metadataContext = Array.from(new Set(similaritySearchResults.map(doc => doc.metadata['title']).flat()));
+
+  console.log('metadataContext:', metadataContext);
 
   const template = `Você é um assistente de IA cristã que conhece as lições de fundamentos e responde estritamente o que esta no contexto abaixo. 
   ----------------
@@ -81,9 +79,7 @@ export async function POST(req: Request) {
       writer.write({
         type: 'message-metadata',
         messageMetadata: {
-          cycle: metadataContext.map(m => m.cycle).join(', '),
-          title: metadataContext.map(m => m.title).join(', '),
-          author: metadataContext.map(m => m.author).join(', '),
+          files: metadataContext,
         },
       });
 
@@ -101,32 +97,32 @@ export async function POST(req: Request) {
   return ui;
 }
 
-async function loadFaissDB() {
+// async function loadFaissDB() {
 
-  const faissDir = path.join(process.cwd(), 'faiss_db');
+//   const faissDir = path.join(process.cwd(), 'faiss_db');
 
-  if (fs.existsSync(faissDir) && fs.existsSync(path.join(faissDir, 'index.faiss')) && fs.existsSync(path.join(faissDir, 'index.pkl'))) {
-    console.log('FAISS DB already exists, skipping download.');
-    return faissDir;
-  }
+//   if (fs.existsSync(faissDir) && fs.existsSync(path.join(faissDir, 'index.faiss')) && fs.existsSync(path.join(faissDir, 'index.pkl'))) {
+//     console.log('FAISS DB already exists, skipping download.');
+//     return faissDir;
+//   }
 
-  const faissUrl = "https://f43hbmzt3ovbfckl.public.blob.vercel-storage.com/fundamentos/faiss/index.faiss";
-  const faissPklUrl = "https://f43hbmzt3ovbfckl.public.blob.vercel-storage.com/fundamentos/faiss/index.pkl";
+//   const faissUrl = "https://f43hbmzt3ovbfckl.public.blob.vercel-storage.com/fundamentos/faiss/index.faiss";
+//   const faissPklUrl = "https://f43hbmzt3ovbfckl.public.blob.vercel-storage.com/fundamentos/faiss/index.pkl";
 
-  const faissIndex = await fetch(faissUrl).then(res => res.arrayBuffer());
-  const faissPkl = await fetch(faissPklUrl).then(res => res.arrayBuffer());
+//   const faissIndex = await fetch(faissUrl).then(res => res.arrayBuffer());
+//   const faissPkl = await fetch(faissPklUrl).then(res => res.arrayBuffer());
 
-  if (!faissIndex || !faissPkl) {
-    throw new Error('Failed to fetch FAISS index or PKL file');
-  }
+//   if (!faissIndex || !faissPkl) {
+//     throw new Error('Failed to fetch FAISS index or PKL file');
+//   }
 
-  fs.mkdirSync(faissDir, { recursive: true });
+//   fs.mkdirSync(faissDir, { recursive: true });
 
-  const faissIndexPath = path.join(faissDir, 'index.faiss');
-  const faissPklPath = path.join(faissDir, 'index.pkl');
+//   const faissIndexPath = path.join(faissDir, 'index.faiss');
+//   const faissPklPath = path.join(faissDir, 'index.pkl');
 
-  fs.writeFileSync(faissIndexPath, Buffer.from(faissIndex));
-  fs.writeFileSync(faissPklPath, Buffer.from(faissPkl));
+//   fs.writeFileSync(faissIndexPath, Buffer.from(faissIndex));
+//   fs.writeFileSync(faissPklPath, Buffer.from(faissPkl));
 
-  return faissDir;
-}
+//   return faissDir;
+// }

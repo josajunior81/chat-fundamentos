@@ -3,9 +3,7 @@ import { z } from 'zod';
 
 // Define your metadata schema
 export const messageMetadataSchema = z.object({
-  cycle: z.string().optional(),
-  title: z.string().optional(),
-  author: z.string().optional(),
+  files: z.array(z.string()).optional(),
 });
 
 export type MessageMetadata = z.infer<typeof messageMetadataSchema>;
