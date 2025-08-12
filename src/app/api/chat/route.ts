@@ -4,11 +4,14 @@ import 'dotenv/config';
 import { ChatMistralAI } from "@langchain/mistralai";
 import { toUIMessageStream } from '@ai-sdk/langchain';
 import { AIMessage, HumanMessage } from '@langchain/core/messages';
-import { createUIMessageStream, createUIMessageStreamResponse, UIMessage, InferUIMessageChunk } from 'ai';
+import { createUIMessageStream, createUIMessageStreamResponse, InferUIMessageChunk } from 'ai';
 import { FaissStore } from "@langchain/community/vectorstores/faiss";
 import { NomicEmbeddings } from "@langchain/nomic";
 import { ChatPromptTemplate } from "@langchain/core/prompts";
 import { FundamentosUIMessage } from '@/app/types';
+
+import fs from 'fs';
+import path from 'path';
 
 // Allow streaming responses up to 30 seconds
 export const maxDuration = 30;
@@ -30,14 +33,17 @@ export async function POST(req: Request) {
 
   const nomicEmbeddings = new NomicEmbeddings({ apiKey: process.env.NOMIC_API_KEY, model: "gte-multilingual-base" });
 
+  // const faissDir = await loadFaissDB();
+  const faissDir = path.join(process.cwd(), 'faiss_db');
+
   const vectorStore = await FaissStore.loadFromPython(
-    `E:\\fundamentos\\app\\upstash\\faiss_db`,
+    faissDir,
     nomicEmbeddings,
   );
 
   const text = messages[messages.length - 1].parts.map((part) => part.type === 'text' ? part.text : '').join('');
 
-  const similaritySearchResults = await vectorStore.similaritySearch(text, 2);
+  const similaritySearchResults = await vectorStore.similaritySearch(text, 5);
 
   let templateContext = similaritySearchResults.map(doc => doc.pageContent).join('\n\n');
   let metadataContext = similaritySearchResults.map(doc => doc.metadata) as MessageMetadata[];
@@ -93,4 +99,34 @@ export async function POST(req: Request) {
 
 
   return ui;
+}
+
+async function loadFaissDB() {
+
+  const faissDir = path.join(process.cwd(), 'faiss_db');
+
+  if (fs.existsSync(faissDir) && fs.existsSync(path.join(faissDir, 'index.faiss')) && fs.existsSync(path.join(faissDir, 'index.pkl'))) {
+    console.log('FAISS DB already exists, skipping download.');
+    return faissDir;
+  }
+
+  const faissUrl = "https://f43hbmzt3ovbfckl.public.blob.vercel-storage.com/fundamentos/faiss/index.faiss";
+  const faissPklUrl = "https://f43hbmzt3ovbfckl.public.blob.vercel-storage.com/fundamentos/faiss/index.pkl";
+
+  const faissIndex = await fetch(faissUrl).then(res => res.arrayBuffer());
+  const faissPkl = await fetch(faissPklUrl).then(res => res.arrayBuffer());
+
+  if (!faissIndex || !faissPkl) {
+    throw new Error('Failed to fetch FAISS index or PKL file');
+  }
+
+  fs.mkdirSync(faissDir, { recursive: true });
+
+  const faissIndexPath = path.join(faissDir, 'index.faiss');
+  const faissPklPath = path.join(faissDir, 'index.pkl');
+
+  fs.writeFileSync(faissIndexPath, Buffer.from(faissIndex));
+  fs.writeFileSync(faissPklPath, Buffer.from(faissPkl));
+
+  return faissDir;
 }
